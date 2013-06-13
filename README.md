@@ -27,21 +27,22 @@ SimpleMapToObject, a object template class implement MapToObject.
 I don't like setter and getter and I do not write bean class., so I do not use bean information class to process the Map to Object.
 For example, User class
 I prefer
-public class User {
-   public int id;
-   public String name;
-}
+
+    public class User {
+       public int id;
+       public String name;
+    }
 
 to
 
-public class User{
-  private int id;
-  private String name;
-  public setId(id) {this.id = id}
-  public int getId() {return this.id}
-  ...
-  ...
-}
+    public class User{
+      private int id;
+      private String name;
+      public setId(id) {this.id = id}
+      public int getId() {return this.id}
+      ...
+      ...
+    }
 
 DBOperationHelper, a database operation helper class, there are two helpful methods to help insert data and update data to database by a Object.
 
@@ -61,13 +62,13 @@ Sample Code:
 
 entity class:
 
-public class User {
-    public String table_name = "users";
+    public class User {
+        public String table_name = "users";
 
-    public int id;
-    public String name = "";
-    public String password = "";
-}
+        public int id;
+        public String name = "";
+        public String password = "";
+    }
 
 
 you can change use table name using table_name attribute.
