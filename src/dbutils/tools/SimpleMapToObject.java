@@ -10,7 +10,7 @@ import java.util.Map;
 
 /**
  *
- * I don't bean, so choose this implement not setter and getter.
+ * I don't like bean, so choose this implement not setter and getter.
  *
  * @author Xiangling Li(hanklee)
  *         $Id: SimpleMapToObject.java 2084 2013-06-08 10:16:17Z hanklee $

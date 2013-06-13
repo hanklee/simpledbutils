@@ -18,7 +18,6 @@ public class UserDAO {
 
     void createUser(String name, String pass) throws SQLException {
         name = name.toLowerCase();
-        QueryRunner qRunner = DBDataSourceHelper.getQueryRunner();
         User user = new User();
         user.name = name;
         user.password = pass;

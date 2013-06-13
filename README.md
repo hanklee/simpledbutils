@@ -44,17 +44,17 @@ to
       ...
     }
 
-DBOperationHelper, a database operation helper class, there are two helpful methods to help insert data and update data to database by a Object.
+DBOperationHelper, a database operation helper class, there are three helpful methods to help insert data, update data or delete data to database by a Object.
 
 Page, a pagination class, to help data of database pagination.
 
 PaginationHelper, a pagination helper class, to help create Page Object by pageNo,pageSize, sqlCountRows,sqlFetchRows and interface MapToObject.
 
-dbutils  generate key   (Note: it is not thread safe)
+GenKeyQueryRunner, dbutils  generate key   (Note: it is not thread safe)
 
 https://issues.apache.org/jira/browse/DBUTILS-54
 
-not like the link solution, I am not override super update method, I create insert method. Because I only just use this class when I inert the object data to table. And this solution is not thread safe, so I don't want use this class in any other operation.
+not like the link solution, I am not override super update method, I create insert method. Because I just only use this class when I inert the object data to table. And this solution is not thread safe, so I don't want use this class in any other operations.
 
 
 Sample Code:
@@ -71,7 +71,7 @@ entity class:
     }
 
 
-you can change use table name using table_name attribute.
+you can change table name using table_name attribute.
 
 Dao class:
 
@@ -112,6 +112,12 @@ Dao class:
     }
 
 It is very simple.
+
+Before use the DBOperationHelper must set inner query runner:
+
+        // set data source the database operation helper
+        DBOperationHelper.setInnerRunner(DBDataSourceHelper.getQueryRunner());
+
 
 
 About the connection pool
