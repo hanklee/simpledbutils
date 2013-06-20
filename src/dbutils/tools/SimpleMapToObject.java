@@ -28,6 +28,18 @@ public class SimpleMapToObject<T> implements MapToObject<T> {
         T o = null;
         try {
             o = clazz.newInstance();
+            Class uper = clazz.getSuperclass();
+            while (uper != null) {
+                for (Field field : uper.getDeclaredFields()) {
+                    String name = field.getName();
+                    Object value = map.get(name);
+                    if (value != null) {
+                        field.set(o, value);
+                    }
+                }
+                uper = uper.getSuperclass();
+            }
+
             for (Field field : clazz.getDeclaredFields()) {
                 //Class type = field.getType();
                 //Annotation[] annotations = field.getDeclaredAnnotations();
