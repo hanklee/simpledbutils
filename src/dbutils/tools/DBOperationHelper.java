@@ -23,16 +23,16 @@ import java.util.Set;
  * Database operation helper
  * <p/>
  * three very helpful methods:<br/>
- * {@link #insert(QueryRunner, Object, String)} insert Object to table<br/>
- * {@link #update(QueryRunner, Object, String)} update Object to table <br/>
- * {@link #delete(QueryRunner, Object, String)} delete Object's data in the table <br/> <br/>
+ * {@link #insert(org.apache.commons.dbutils.QueryRunner, Object, String)} insert Object to table<br/>
+ * {@link #update(org.apache.commons.dbutils.QueryRunner, Object, String)} update Object to table <br/>
+ * {@link #delete(org.apache.commons.dbutils.QueryRunner, Object, String)} delete Object's data in the table <br/> <br/>
  * also there are three similar no table name methods <br/>
- * {@link #insert(QueryRunner, Object)},{@link #update(QueryRunner, Object)},{@link #delete(QueryRunner, Object)}<br/>
+ * {@link #insert(org.apache.commons.dbutils.QueryRunner, Object)},{@link #update(org.apache.commons.dbutils.QueryRunner, Object)},{@link #delete(org.apache.commons.dbutils.QueryRunner, Object)}<br/>
  * The table name generate by Object class name + 's', this idea inspired by PHP Cake.
  * <p/>
  *
  * @author Xiangling Li(hanklee)
- *         $Id: DBOperationHelper.java 2086 2013-06-09 07:03:39Z hanklee $
+ *         $Id: DBOperationHelper.java 2125 2013-06-20 14:56:44Z hanklee $
  */
 public class DBOperationHelper {
 
@@ -114,8 +114,8 @@ public class DBOperationHelper {
 
             StringBuilder s = new StringBuilder("update " + table + " set ");
 
-            Set<String> columns = getColumns(queryRunner, table);
-            columns.remove(primary_key);
+            Set<String> columns = getColumns(queryRunner, table, primary_key, false);
+            //columns.remove(primary_key);
             Object[] objs = new Object[columns.size() + 1];
             int count = 0;
             int size = columns.size();
@@ -168,8 +168,7 @@ public class DBOperationHelper {
             StringBuffer s = new StringBuffer("insert into " + table + "(");
             StringBuilder sv = new StringBuilder(" values(");
 
-            Set<String> columns = getColumns(queryRunner, table);
-            columns.remove(primary_key);
+            Set<String> columns = getColumns(queryRunner, table, primary_key,true);
             Object[] objs = new Object[columns.size()];
             int count = 0;
             int size = columns.size();
@@ -189,14 +188,14 @@ public class DBOperationHelper {
             String sql = s.append(sv).toString();
 
             // no thread safe
-            GenKeyQueryRunner qRunner = new GenKeyQueryRunner(DBDataSourceHelper.getQueryRunner().getDataSource(),
+            GenKeyQueryRunner qRunner = new GenKeyQueryRunner(queryRunner.getDataSource(),
                     new ScalarHandler(), primary_key);
 
             int mount = qRunner.insert(sql, objs);
             if (mount < 1) {
                 throw new SQLException("No data insert.");
             }
-            if (keyField != null) {
+            if (keyField != null && !columns.contains(primary_key) /* is auto increase */) {
                 //System.out.println(".....generate id:" + qRunner.getGeneratedKeys());
                 if (keyField.getType().equals(Integer.TYPE))
                     keyField.set(obj, ((Long) qRunner.getGeneratedKeys()).intValue());
@@ -247,10 +246,12 @@ public class DBOperationHelper {
      *
      * @param queryRunner dbutils QueryRunner class
      * @param table       table name
+     * @param useAutoincrease use auto increase to delete the primary key
      * @return a Set of string
      * @throws java.sql.SQLException
      */
-    public static Set<String> getColumns(QueryRunner queryRunner, String table) throws SQLException {
+    public static Set<String> getColumns(QueryRunner queryRunner, String table,
+                                         String primaryKey,boolean useAutoincrease) throws SQLException {
         Set<String> columns = new HashSet<String>();
         Connection con = null;
         ResultSet rs;
@@ -258,7 +259,14 @@ public class DBOperationHelper {
             con = queryRunner.getDataSource().getConnection();
             rs = con.getMetaData().getColumns(null, null, table, null);
             while (rs.next()) { //字段名称在第 4 列
-                columns.add(rs.getString(4));  //rs.getString("COLUMN_NAME");
+                String name = rs.getString(4);
+                if (name.equals(primaryKey) && ( !useAutoincrease || "true".equals(rs.getString("IS_AUTOINCREMENT"))) ) {
+                    // nothing
+                } else {
+                    columns.add(name);
+                }
+                //rs.getString("COLUMN_NAME");
+                //;
             }
         } finally {
             DbUtils.close(con);
@@ -275,31 +283,32 @@ public class DBOperationHelper {
      * @throws java.sql.SQLException
      */
     public static String getPrimaryKey(QueryRunner queryRunner, String table) throws SQLException {
-        String key_name = null;
+        String key = null;
         Connection con = null;
         ResultSet rs;
         try {
             con = queryRunner.getDataSource().getConnection();
             rs = con.getMetaData().getPrimaryKeys(null, null, table);
+
             if (rs.next()) { //字段名称在第 4 列
-                key_name = rs.getString(4);   //rs.getString("COLUMN_NAME");
+                key = rs.getString(4);   //rs.getString("COLUMN_NAME");
             }
         } finally {
             DbUtils.close(con);
         }
-        return key_name;
+        return key;
     }
 
     /**
      * generate table name by object
      *
      * @param obj Object
-     * @return  table name
+     * @return table name
      */
     public static String getTableNameByObject(Object obj) {
         try {
             Field field = obj.getClass().getField("table_name");
-            return (String)field.get(obj);
+            return (String) field.get(obj);
         } catch (Exception e) {
             return obj.getClass().getSimpleName() + "s";
         }
