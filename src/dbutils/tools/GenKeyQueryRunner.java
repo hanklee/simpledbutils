@@ -201,28 +201,25 @@ public class GenKeyQueryRunner<T> extends QueryRunner {
         // Clear generatedKeys first, in case an exception is thrown
         this.generatedKeys = null;
         // may be it will thread safe,maybe??
-        synchronized (conn) {
-            try {
-                // lock this conn
+        // synchronized connection will be a problem ?
+//        synchronized (this.prepareConnection()) {
+        try {
+            // lock this conn
 
-                stmt = this.prepareStatement(conn, sql);
-                this.fillStatement(stmt, params);
-                rows = stmt.executeUpdate();
-                autoKeyRs = stmt.getGeneratedKeys();
-                this.generatedKeys = keyHandler.handle(autoKeyRs);
-                // Store the generated keys here, they will be available for
-                // retrieval via the getGeneratedKeys method
+            stmt = this.prepareStatement(conn, sql);
+            this.fillStatement(stmt, params);
+            rows = stmt.executeUpdate();
+            autoKeyRs = stmt.getGeneratedKeys();
+            this.generatedKeys = keyHandler.handle(autoKeyRs);
+            // Store the generated keys here, they will be available for
+            // retrieval via the getGeneratedKeys method
 
-            } catch (SQLException e) {
-                this.rethrow(e, sql, params);
-
-            } finally {
-                try {
-                    close(autoKeyRs);
-                } finally {
-                    close(stmt);
-                }
-            }
+        } catch (SQLException e) {
+            this.rethrow(e, sql, params);
+        } finally {
+            close(autoKeyRs);
+            close(stmt);
+            close(conn);
         }
         return rows;
     }

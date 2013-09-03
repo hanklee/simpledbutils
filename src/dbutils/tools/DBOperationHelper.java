@@ -35,6 +35,7 @@ import java.util.Set;
  *         $Id: DBOperationHelper.java 2125 2013-06-20 14:56:44Z hanklee $
  */
 public class DBOperationHelper {
+    private static final Object insertLock = new Object();
 
     private static QueryRunner innerRunner;
 
@@ -60,7 +61,7 @@ public class DBOperationHelper {
      *
      * @param queryRunner dbutils QueryRunner class
      * @param obj         an object to update his data to database
-     * @throws java.sql.SQLException sql Exception
+     * @throws SQLException sql Exception
      */
     public static void update(QueryRunner queryRunner, Object obj) throws SQLException {
         String table = getTableNameByObject(obj);
@@ -73,7 +74,7 @@ public class DBOperationHelper {
      *
      * @param queryRunner dbutils QueryRunner class
      * @param obj         an object to insert his data to database
-     * @throws java.sql.SQLException sql Exception
+     * @throws SQLException sql Exception
      */
     public static void insert(QueryRunner queryRunner, Object obj) throws SQLException {
         String table = getTableNameByObject(obj);
@@ -85,7 +86,7 @@ public class DBOperationHelper {
      *
      * @param queryRunner dbutils QueryRunner class
      * @param obj         a Object relate the table's row data
-     * @throws java.sql.SQLException sql Exception
+     * @throws SQLException sql Exception
      */
     public static void delete(QueryRunner queryRunner, Object obj) throws SQLException {
         String table = getTableNameByObject(obj);
@@ -98,44 +99,59 @@ public class DBOperationHelper {
      * @param queryRunner dbutils QueryRunner class
      * @param obj         an object to update his data to database
      * @param table       table name
-     * @throws java.sql.SQLException sql Exception
+     * @throws SQLException sql Exception
      */
     public static void update(QueryRunner queryRunner, Object obj, String table) throws SQLException {
         Map<String, Object> map = new HashMap<String, Object>();
-        Field[] field = obj.getClass().getDeclaredFields();
 
         try {
-            for (Field f : field) {
-                Object o = f.get(obj);
-                map.put(f.getName(), o);
+            Class clazz = obj.getClass();
+
+            while (clazz != null) {
+                Field[] field = clazz.getDeclaredFields();
+                for (Field f : field) {
+                    Object o = f.get(obj);
+                    map.put(f.getName(), o);
+                }
+                clazz = clazz.getSuperclass();
             }
 
-            String primary_key = getPrimaryKey(queryRunner, table);
+            Set<String> primary_keys = getPrimaryKey(queryRunner, table);
+            //String primary_key = getPrimaryKey(queryRunner, table);
 
-            StringBuilder s = new StringBuilder("update " + table + " set ");
+            StringBuilder s = new StringBuilder("update ").append(table).append(" set ");
 
-            Set<String> columns = getColumns(queryRunner, table, primary_key, false);
+            Set<String> columns = getColumns(queryRunner, table, primary_keys, false);
             //columns.remove(primary_key);
-            Object[] objs = new Object[columns.size() + 1];
+            Object[] objs = new Object[columns.size() + primary_keys.size()];
             int count = 0;
             int size = columns.size();
             for (String column : columns) {
                 if (--size == 0) {
                     // last item
-                    s.append(column + "=? ");
+                    s.append(column).append("=? ");
                 } else {
-                    s.append(column + "=?, ");
+                    s.append(column).append("=?, ");
                 }
                 objs[count] = map.get(column);
                 count++;
             }
-            s.append(" where ").append(primary_key).append(" = ?");
-            objs[count] = map.get(primary_key);
+            s.append(" where ");
+            int key_size = primary_keys.size();
+            int kye_i = 1;
+            for (String primary_key : primary_keys) {
+                s.append(primary_key).append(" = ? ");
+                if (kye_i != key_size)
+                    s.append(" AND ");
+                objs[count] = map.get(primary_key);
+                count++;
+                kye_i++;
+            }
             String sql = s.toString();
             //QueryRunner queryRunner =  DBDataSourceHelper.getQueryRunner();
             int mount = queryRunner.update(sql, objs);
             if (mount < 1) {
-                throw new SQLException("No data update.");
+                throw new SQLException("No data update." + sql);
             }
         } catch (Exception e) {
             throw new SQLException(e.getMessage());
@@ -148,37 +164,45 @@ public class DBOperationHelper {
      * @param queryRunner dbutils QueryRunner class
      * @param obj         an object to insert his data to database
      * @param table       table name
-     * @throws java.sql.SQLException sql Exception
+     * @throws SQLException sql Exception
      */
     public static void insert(QueryRunner queryRunner, Object obj, String table) throws SQLException {
         Map<String, Object> map = new HashMap<String, Object>();
-        Field[] field = obj.getClass().getDeclaredFields();
+
         //Field.setAccessible(field, true);
 
         try {
-            String primary_key = getPrimaryKey(queryRunner, table);
+            Set<String> primary_keys = getPrimaryKey(queryRunner, table);
+            String[] array_keys = primary_keys.toArray(new String[primary_keys.size()]);
+
             Field keyField = null;
-            for (Field f : field) {
-                Object o = f.get(obj);
-                map.put(f.getName(), o);
-                if (f.getName().equals(primary_key))
-                    keyField = f;
+            Class clazz = obj.getClass();
+            while (clazz != null) {
+                Field[] field = clazz.getDeclaredFields();
+                for (Field f : field) {
+                    Object o = f.get(obj);
+                    map.put(f.getName(), o);
+                    if (array_keys.length == 1 && f.getName().equals(array_keys[0]))  // only test one element
+                        keyField = f;
+                }
+                clazz = clazz.getSuperclass();
             }
 
-            StringBuffer s = new StringBuffer("insert into " + table + "(");
+            StringBuilder s = new StringBuilder("insert into ").append(table).append("(");
             StringBuilder sv = new StringBuilder(" values(");
 
-            Set<String> columns = getColumns(queryRunner, table, primary_key,true);
+            Set<String> columns = getColumns(queryRunner,
+                    table, primary_keys, true); // true means if it is not auto increase then add key's column
             Object[] objs = new Object[columns.size()];
             int count = 0;
             int size = columns.size();
             for (String column : columns) {
                 if (--size == 0) {
                     // last item
-                    s.append(column + ")");
+                    s.append(column).append(")");
                     sv.append("?)");
                 } else {
-                    s.append(column + ",");
+                    s.append(column).append(",");
                     sv.append("?,");
                 }
                 objs[count] = map.get(column);
@@ -187,20 +211,24 @@ public class DBOperationHelper {
 
             String sql = s.append(sv).toString();
 
-            // no thread safe
-            GenKeyQueryRunner qRunner = new GenKeyQueryRunner(queryRunner.getDataSource(),
-                    new ScalarHandler(), primary_key);
+            synchronized (insertLock) {
+                // no thread safe
+                GenKeyQueryRunner qRunner = new GenKeyQueryRunner<Long>(queryRunner.getDataSource(),
+                        new ScalarHandler<Long>(), array_keys);
 
-            int mount = qRunner.insert(sql, objs);
-            if (mount < 1) {
-                throw new SQLException("No data insert.");
-            }
-            if (keyField != null && !columns.contains(primary_key) /* is auto increase */) {
-                //System.out.println(".....generate id:" + qRunner.getGeneratedKeys());
-                if (keyField.getType().equals(Integer.TYPE))
-                    keyField.set(obj, ((Long) qRunner.getGeneratedKeys()).intValue());
-                else if (keyField.getType().equals(Long.TYPE))
-                    keyField.set(obj, qRunner.getGeneratedKeys());
+                int mount = qRunner.insert(sql, objs);
+                if (mount < 1) {
+                    throw new SQLException("No data insert.");
+                }
+
+                if (keyField != null && !columns.contains(array_keys[0]) /* is auto increase */) {
+                    if (keyField.getType().equals(Integer.TYPE)) {
+                        keyField.set(obj, ((Long) qRunner.getGeneratedKeys()).intValue());
+//                        System.out.println(sql);
+                    } else if (keyField.getType().equals(Long.TYPE)) {
+                        keyField.set(obj, qRunner.getGeneratedKeys());
+                    }
+                }
             }
         } catch (Exception e) {
             throw new SQLException(e.getMessage());
@@ -213,26 +241,39 @@ public class DBOperationHelper {
      * @param queryRunner dbutils QueryRunner class
      * @param obj         a Object relate the table's row data
      * @param table       table name
-     * @throws java.sql.SQLException
+     * @throws SQLException
      */
     public static void delete(QueryRunner queryRunner, Object obj, String table) throws SQLException {
         Map<String, Object> map = new HashMap<String, Object>();
-        Field[] field = obj.getClass().getDeclaredFields();
-        //Field.setAccessible(field, true);
-
         try {
-            for (Field f : field) {
-                Object o = f.get(obj);
-                map.put(f.getName(), o);
+            Class clazz = obj.getClass();
+            while (clazz != null) {
+                Field[] field = clazz.getDeclaredFields();
+                for (Field f : field) {
+                    Object o = f.get(obj);
+                    map.put(f.getName(), o);
+                }
+                clazz = clazz.getSuperclass();
             }
 
-            String primary_key = getPrimaryKey(queryRunner, table);
+            Set<String> primary_keys = getPrimaryKey(queryRunner, table);
 
             StringBuilder s = new StringBuilder("delete from ");
-            s.append(table).append(" where ").append(primary_key).append(" = ?");
-            Object key_value = map.get(primary_key);
+            s.append(table).append(" where ");
+            Object[] objs = new Object[primary_keys.size()];
+            int count = 0;
+            int key_size = primary_keys.size();
+            int kye_i = 1;
+            for (String primary_key : primary_keys) {
+                s.append(primary_key).append(" = ? ");
+                if (kye_i != key_size)
+                    s.append(" AND ");
+                objs[count] = map.get(primary_key);
+                count++;
+                kye_i++;
+            }
             String sql = s.toString();
-            int mount = queryRunner.update(sql, key_value);
+            int mount = queryRunner.update(sql, objs);
             if (mount < 1) {
                 throw new SQLException("No data delete.");
             }
@@ -246,27 +287,29 @@ public class DBOperationHelper {
      *
      * @param queryRunner dbutils QueryRunner class
      * @param table       table name
-     * @param useAutoincrease use auto increase to delete the primary key
+     * @param addKeys     is true and key is not auto increase then add columns
      * @return a Set of string
-     * @throws java.sql.SQLException
+     * @throws SQLException
      */
     public static Set<String> getColumns(QueryRunner queryRunner, String table,
-                                         String primaryKey,boolean useAutoincrease) throws SQLException {
+                                         Set<String> primaryKeys, boolean addKeys) throws SQLException {
         Set<String> columns = new HashSet<String>();
         Connection con = null;
         ResultSet rs;
         try {
             con = queryRunner.getDataSource().getConnection();
             rs = con.getMetaData().getColumns(null, null, table, null);
-            while (rs.next()) { //字段名称在第 4 列
-                String name = rs.getString(4);
-                if (name.equals(primaryKey) && ( !useAutoincrease || "true".equals(rs.getString("IS_AUTOINCREMENT"))) ) {
+            while (rs.next()) { // column name in the NO. 4
+                String name = rs.getString(4); //rs.getString("COLUMN_NAME");
+                if (primaryKeys.contains(name)) {
+                    if (addKeys && !"YES".equals(rs.getString("IS_AUTOINCREMENT"))) {
+                        columns.add(name);
+                    }
+//                    System.out.println(rs.getString("IS_AUTOINCREMENT")); "YES"
                     // nothing
                 } else {
                     columns.add(name);
                 }
-                //rs.getString("COLUMN_NAME");
-                //;
             }
         } finally {
             DbUtils.close(con);
@@ -280,23 +323,25 @@ public class DBOperationHelper {
      * @param queryRunner dbutils QueryRunner class
      * @param table       table name
      * @return primary key name
-     * @throws java.sql.SQLException
+     * @throws SQLException
      */
-    public static String getPrimaryKey(QueryRunner queryRunner, String table) throws SQLException {
-        String key = null;
+    public static Set<String> getPrimaryKey(QueryRunner queryRunner, String table) throws SQLException {
+        Set<String> keys = new HashSet<String>();
+        String key;
         Connection con = null;
         ResultSet rs;
         try {
             con = queryRunner.getDataSource().getConnection();
             rs = con.getMetaData().getPrimaryKeys(null, null, table);
 
-            if (rs.next()) { //字段名称在第 4 列
+            while (rs.next()) { // column name in the NO. 4
                 key = rs.getString(4);   //rs.getString("COLUMN_NAME");
+                keys.add(key);
             }
         } finally {
             DbUtils.close(con);
         }
-        return key;
+        return keys;
     }
 
     /**
@@ -307,7 +352,15 @@ public class DBOperationHelper {
      */
     public static String getTableNameByObject(Object obj) {
         try {
-            Field field = obj.getClass().getField("table_name");
+            Class clazz = obj.getClass();
+            Field field = clazz.getField("table_name");
+            if (field == null && clazz.getSuperclass() != null) {
+                clazz = clazz.getSuperclass();
+                field = clazz.getField("table_name");
+            }
+            if (field == null) {
+                return obj.getClass().getSimpleName() + "s";
+            }
             return (String) field.get(obj);
         } catch (Exception e) {
             return obj.getClass().getSimpleName() + "s";

@@ -14,22 +14,21 @@ import java.util.List;
  * simple pagination
  *
  * @author Xianling Li(hanklee)
- * $Id: PaginationHelper.java 2086 2013-06-09 07:03:39Z hanklee $
+ *         $Id: PaginationHelper.java 2086 2013-06-09 07:03:39Z hanklee $
  */
 public class PaginationHelper<E> {
 
     /**
-     *
      * generate the page data
      *
-     * @param qRunner QueryRunner class
-     * @param sqlCountRows sql count string
-     * @param sqlFetchRows sql fetch string
-     * @param pageNo page number
-     * @param pageSize page size
+     * @param qRunner           QueryRunner class
+     * @param sqlCountRows      sql count string
+     * @param sqlFetchRows      sql fetch string
+     * @param pageNo            page number
+     * @param pageSize          page size
      * @param objectListHandler Object List handler Object
-     * @param params sql parameter
-     * @return  page object
+     * @param params            sql parameter
+     * @return page object
      */
     public Page<E> fetchPage(
             final QueryRunner qRunner,
@@ -47,7 +46,7 @@ public class PaginationHelper<E> {
 
             // calculate the number of pages
             int pageCount = rowCount / pageSize;
-            if (rowCount > pageSize * pageCount) {
+            if (rowCount > pageSize * pageCount || pageCount == 0) {
                 pageCount++;
             }
 
@@ -58,11 +57,13 @@ public class PaginationHelper<E> {
             final Page<E> page = new Page<E>();
             page.setPageNumber(pageNo);
             page.setPagesAvailable(pageCount);
+            page.setPageSize(pageSize);
+            page.setTotal(rowCount);
 
             // fetch a single page of results
             // Mysql sql
             final int startRow = (pageNo - 1) * pageSize;
-            String mySqlFetch = sqlFetchRows + " LIMIT " + startRow + " , " +  pageSize;
+            String mySqlFetch = sqlFetchRows + " LIMIT " + startRow + " , " + pageSize;
             List<E> objects = qRunner.query(
                     mySqlFetch,
                     objectListHandler, params);

@@ -16,8 +16,11 @@ import java.util.List;
  */
 public class Page<E> {
 
+
     private int pageNumber;
     private int pagesAvailable;
+    private int total;
+    private int pageSize;
     private List<E> pageItems = new ArrayList<E>();
 
     public void setPageNumber(int pageNumber) {
@@ -32,12 +35,28 @@ public class Page<E> {
         this.pageItems = pageItems;
     }
 
+    public void setTotal(int total) {
+        this.total = total;
+    }
+
     public int getPageNumber() {
         return pageNumber;
     }
 
     public int getPagesAvailable() {
         return pagesAvailable;
+    }
+
+    public int getTotal() {
+        return total;
+    }
+
+    public int getPageSize() {
+        return pageSize;
+    }
+
+    public void setPageSize(int pageSize) {
+        this.pageSize = pageSize;
     }
 
     public List<E> getPageItems() {
